@@ -1,0 +1,24 @@
+{
+    "path":{
+        "pngImages":"/Users/mac/Downloads/siim-acr-pneumothorax/png_images",
+        "pngMasks":"/Users/mac/Downloads/siim-acr-pneumothorax/png_masks",
+        "testCsv":"/Users/mac/Downloads/siim-acr-pneumothorax/stage_1_test_images.csv",
+
+        "trainCsv":"/Users/mac/Downloads/siim-acr-pneumothorax/stage_1_train_images.csv"
+
+
+    },
+    "data":{
+        "useMiniData":"yes",
+        "miniData":{
+            "train":200,
+            "val":2000
+
+        }
+    },
+    "train":{
+        "batch_size":32
+    }
+
+   
+}
