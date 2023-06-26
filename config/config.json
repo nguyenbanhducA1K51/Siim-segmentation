@@ -8,17 +8,32 @@
 
 
     },
+    "image":{
+        "size":"512"
+    },
     "data":{
         "useMiniData":"yes",
         "miniData":{
             "train":200,
             "val":2000
-
         }
+
     },
     "train":{
-        "batch_size":32
-    }
+        "epochs":1,
+        "batch_size":32,
+        "log_interval":4,
+        "optimizer":{
+            "name": "Adam",
+            "lr":1e-4,
+            "weight_decay":0.0
+        }  
+    },
+    "criterion":"bce",
+    "model": "unet"
+    
+
+
 
    
 }
