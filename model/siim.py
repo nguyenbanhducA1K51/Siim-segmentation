@@ -20,24 +20,24 @@ class SIIMnet():
         self.cfg=cfg
         self.device=device
         self.metric=modelUtils.Metric(cfg=cfg,device=self.device)
-        self.model=self.loadModel(cfg=cfg).to(self.device)
+        self.model=self.loadModel().to(self.device)
         self.optimizer=self.loadOptimizer(model=self.model)
         self.criterion=self.loadCriterion()
         
     def train_epoch(self,dataLoader,model,epoch):
         log_interval=self.cfg.train.log_interval
         model.train()
-        for idx, (x,y_true) in enumerate(tqdm(dataLoader), start=1):
+        for idx, (oriIdx,x,y_true) in enumerate(dataLoader):
             x=x.to(self.device).float()
-            y_hat=model(x)
-            y_true=y_true.to(self.device).float()
+            y_hat=model(x).squeeze(1)
+            y_true=y_true.to(self.device).float()  
             self.optimizer.zero_grad()
-            loss=self.criterion(output=y_hat,target=y_true)
+            loss=self.criterion(y_hat,y_true)
             loss.backward()
             self.optimizer.step()
             if idx % log_interval == 0:
                     print(' index {} Train Epoch: {} [{}/{} ({:.0f}%)]\t  Loss {: .5f}'.format( idx,
-                        epoch, idx * len(), len(dataLoader.dataset), 
+                        epoch, idx * len(x), len(dataLoader.dataset), 
                         100. * idx / len(dataLoader),loss.item() ))
         
     def eval (self,dataLoader,model,epoch):
@@ -45,33 +45,38 @@ class SIIMnet():
         iouAverage= modelUtils.AverageMeter()
         diceAverage=modelUtils.AverageMeter()
         lossAverage=modelUtils.AverageMeter()
-        for idx, (x,y_true) in enumerate(tqdm(dataLoader), start=1):
-            x=x.to(self.device).float()
-            y_hat=model(x)
-            y_hat=y_hat.sigmoid().round().long()
-            y_true=y_true.to(self.device).float()
+        with torch.no_grad():
+            for idx, (_,x,y_true) in enumerate(dataLoader):
+                x=x.to(self.device).float()
+                y_hat=model(x).squeeze(1)
+                
+                
+                y_true=y_true.to(self.device)
 
-            loss=self.criterion(output=y_hat,target=y_true)
-            metric=self.metric.computeMetric(output=y_hat,target=y_true)
-            lossAverage.update(loss.item())
-            diceAverage.update(metric["dice"])
-            iouAverage.update(metric["iou"])
-        print ("Mean loss {:3f}, Mean IoU : {:3f}, Mean Dice :{:3f} ".format(lossAverage.avg,iouAverage.avg,diceAverage.avg) )
-        return lossAverage.avg,iouAverage.avg,diceAverage.avg
+                loss=self.criterion(y_hat,y_true)
+                print (y_hat)
+            
+                metric=self.metric.computeMetric(output=y_hat,target=y_true)
+                lossAverage.update(loss.item())
+                diceAverage.update(metric["dice"])
+                iouAverage.update(metric["iou"])
+            print ("Mean loss {:3f}, Mean IoU : {:3f}, Mean Dice :{:3f} ".format(lossAverage.avg,iouAverage.avg,diceAverage.avg) )
+            return lossAverage.avg,iouAverage.avg,diceAverage.avg
     def train_epochs(self,trainLoader,valLoader):
-        for epoch in range (1, self.cfg.train.epochs):
+        for epoch in range (1, self.cfg.train.epochs+1):
 
             self.train_epoch(dataLoader=trainLoader,epoch=epoch,model=self.model)
             self.eval(dataLoader=valLoader,model=self.model,epoch=epoch)
     def loadModel(self):
         if self.cfg.model=="unet":
-            return models.Unet(n_classes=2)
-    def loadOptimizer(self,cfg,model):
-        if cfg.train.optimizer=="Adam":
+            return models.UNet(n_classes=2)
+    def loadOptimizer(self,model):
+        if self.cfg.train.optimizer.name=="Adam":
+            
             return optim.Adam(model.parameters(),lr=self.cfg.train.optimizer.lr, weight_decay=self.cfg.train.optimizer.weight_decay)
     def loadCriterion(self):
         if self.cfg.criterion=="bce":
-            return nn.BCEWithLogitsLoss
+            return nn.BCEWithLogitsLoss()
          
     
 

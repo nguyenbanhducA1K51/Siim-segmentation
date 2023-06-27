@@ -18,7 +18,12 @@ class UNet(nn.Module):
         self.block_up2 = self.unet_block(256+512, 256)
         self.block_up3 = self.unet_block(128+256, 128)
         self.block_up4 = self.unet_block(128+64, 64)
-        self.conv_cls = nn.Conv2d(64, self.n_classes, 1) # -> (B, n_class, H, W)
+        if self.n_classes==2:
+
+            self.conv_cls = nn.Conv2d(64, 1, 1) # -> (B, n_class, H, W)
+        else:
+            self.conv_cls = nn.Conv2d(64, self.n_classes, 1)
+
     
     def forward(self, x):
         # (B, C, H, W)

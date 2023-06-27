@@ -1,10 +1,10 @@
 {
     "path":{
-        "pngImages":"/Users/mac/Downloads/siim-acr-pneumothorax/png_images",
-        "pngMasks":"/Users/mac/Downloads/siim-acr-pneumothorax/png_masks",
-        "testCsv":"/Users/mac/Downloads/siim-acr-pneumothorax/stage_1_test_images.csv",
+        "pngImages":"/root/data/siim-acr-pneumothorax/png_images",
+        "pngMasks":"/root/data/siim-acr-pneumothorax/png_masks",
+        "testCsv":"/root/data/siim-acr-pneumothorax/stage_1_test_images.csv",
 
-        "trainCsv":"/Users/mac/Downloads/siim-acr-pneumothorax/stage_1_train_images.csv"
+        "trainCsv":"/root/data/siim-acr-pneumothorax/stage_1_train_images.csv"
 
 
     },
@@ -14,15 +14,15 @@
     "data":{
         "useMiniData":"yes",
         "miniData":{
-            "train":200,
-            "val":2000
+            "train":50,
+            "val":5
         }
 
     },
     "train":{
         "epochs":1,
-        "batch_size":32,
-        "log_interval":4,
+        "batch_size":2,
+        "log_interval":1,
         "optimizer":{
             "name": "Adam",
             "lr":1e-4,

@@ -64,7 +64,7 @@ class SiimDatast(Dataset):
         
         image = cv2.imread(imgPath,0)
         mask = cv2.imread(maskPath,0)
-        print ("original shape "+ str(image.shape))
+        # print ("original shape "+ str(image.shape))
         if self.transform is not None:
             transformed = self.transform(image=image, mask=mask)
         return oriIndex, transformed["image"], transformed["mask"]
@@ -101,10 +101,14 @@ class SiimDatast(Dataset):
 
 
 
-def norm (image,*arg,**karg):
+def imageNorm (image,*arg,**karg):
             image= np.divide(np.array(image,copy=True).astype(np.float32),255)
             image= np.expand_dims(image, axis=0)
             return np.repeat(image,3,axis=0)
+def maskNorm (mask,*arg,**krg):
+            mask=np.divide(np.array(mask,copy=True).astype(np.float32),255)
+            return mask
+
 
 def loadData(cfg, mode="default"):
     batch_size = cfg.train.batch_size
@@ -115,11 +119,13 @@ def loadData(cfg, mode="default"):
     trainTransform = A.Compose([
         A.Resize(height=imgSize+2*margin,width=imgSize+2*margin),
         A.RandomSizedCrop(min_max_height=( imgSize-margin,imgSize+margin),height=imgSize,width=imgSize,w2h_ratio=1.0),
-         A.Lambda( image=norm),
+         A.Lambda( image=imageNorm,mask=maskNorm),
 
     ])
     valTransform = A.Compose([
+
         A.Resize(height=imgSize,width=imgSize),
+        A.Lambda( image=imageNorm,mask=maskNorm),
 
     ])
     trainset = SiimDatast(cfg=cfg,csv_file=cfg.path.trainCsv, transform=trainTransform, mode="train")
@@ -137,13 +143,13 @@ def loadData(cfg, mode="default"):
 
 
 
-cfg_path="/Users/mac/vinBrain/seg/config/config.json" 
-with open(cfg_path) as f:
-    cfg = edict(json.load(f))
-# numclass,train_loader,test_loader=loadData(cfg=cfg)
+# cfg_path="/Users/mac/vinBrain/seg/config/config.json" 
+# with open(cfg_path) as f:
+#     cfg = edict(json.load(f))
+# # numclass,train_loader,test_loader=loadData(cfg=cfg)
 
-path= "/Users/mac/Downloads/siim-acr-pneumothorax/png_images/0_train_0_.png"
+# path= "/Users/mac/Downloads/siim-acr-pneumothorax/png_images/0_train_0_.png"
 
-train,test=loadData(cfg=cfg)
+# train,test=loadData(cfg=cfg)
 
 
