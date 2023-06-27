@@ -1,8 +1,9 @@
 
 import torch.nn as nn
 import torch
+# should train this unet to have pretrain weight
 class UNet(nn.Module):
-    # should practice write mpodel
+   
     # Unet model require input width to be divisible by 16 
     def __init__(self, n_classes):
         super().__init__()

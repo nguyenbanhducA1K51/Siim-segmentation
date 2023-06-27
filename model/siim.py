@@ -1,6 +1,4 @@
 # print('__file__={0:<35} | __name__={1:<20} | __package__={2:<20}'.format(__file__,__name__,str(__package__)))
-import torchmetrics
-from torchmetrics import Dice, JaccardIndex
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
@@ -14,6 +12,7 @@ from data import dataUtil
 from model import modelUtils, models
 from torch.optim import Adam
 import torch.optim as optim
+import segmentation_models_pytorch as smp
 
 class SIIMnet():
     def __init__(self,cfg,device) :
@@ -65,7 +64,13 @@ class SIIMnet():
             self.eval(dataLoader=valLoader,model=self.model,epoch=epoch)
     def loadModel(self):
         if self.cfg.model=="unet":
-            return models.Unet(n_classes=2)
+            # return models.Unet(n_classes=2)
+            return smp.Unet(
+            encoder_name=ENCODER, 
+            encoder_weights=ENCODER_WEIGHTS, 
+            classes=len(CLASSES), 
+            activation=ACTIVATION,
+        )
     def loadOptimizer(self,cfg,model):
         if cfg.train.optimizer=="Adam":
             return optim.Adam(model.parameters(),lr=self.cfg.train.optimizer.lr, weight_decay=self.cfg.train.optimizer.weight_decay)

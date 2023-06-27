@@ -133,10 +133,6 @@ def loadData(cfg, mode="default"):
         testset, batch_size=1, shuffle=False)
     return trainLoader,testLoader
 
-
-
-
-
 cfg_path="/Users/mac/vinBrain/seg/config/config.json" 
 with open(cfg_path) as f:
     cfg = edict(json.load(f))
