@@ -1,5 +1,6 @@
-# from ..data import dataUtil
-# print('__file__={0:<35} | __name__={1:<20} | __package__={2:<20}'.format(__file__,__name__,str(__package__)))
+
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
 import sys
 import torch
 import json,os
@@ -7,6 +8,10 @@ from  model import siim
 from  data import dataLoader
 from torch.nn import functional as F
 from easydict import EasyDict as edict
+import warnings
+import logging
+
+warnings.filterwarnings("ignore")
 cfg_path=os.path.dirname(os.path.abspath(__name__))+"/config/config.json"
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

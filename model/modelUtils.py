@@ -3,30 +3,108 @@ from torchmetrics import Dice, JaccardIndex
 from torchmetrics.functional import dice as d
 import numpy as np
 import torch.nn as nn
-import torch as t
+import torch    
+import torch.nn.functional as F 
+class focalLoss(nn.Module):
+    def __init__(self,gamma,alpha=1):
+        super().__init__()
+        self.gamma=gamma
+        self.alpha=alpha
+        
+    def forward(self,input,target):
+        if input.max()>1. :
+            print ("inputs >1")
+        ep=1e-7
+        iflat=input.view(input.shape[0], -1)
+        tflat=target.view(input.shape[0], -1)
+        iflat=iflat.clamp(ep,1-ep)
+        loss = -1 * torch.log(iflat) * tflat.float() # cross entropy
+        loss = self.alpha * loss * (1 - iflat) ** self.gamma #
+        return loss.mean()
+class weightBinaryloss(nn.Module):
+    def __init__(self,beta=4):
+        super().__init__()
+        self.beta=beta
+    def forward(self,input,target):
+        ep=1e-7
+        input=torch.clamp(input,min=ep, max=1-ep)  
+        loss=-self.beta*target*torch.log(input)-(1-target)* torch.log(1-input)
+        return loss.mean()
+   
+def dice_coef(input, target):
+    # input in range(0,1)
+    smooth = 1.0
+    iflat = input.view(-1)
+    tflat = target.view(-1)
+    intersection = (iflat * tflat).sum()
+    dice=(2.0 * intersection + smooth) / (iflat.sum() + tflat.sum() + smooth)   
+    return dice
+class MixedLoss(nn.Module):
+    def __init__(self,  gamma,alpha=1):
+        super().__init__()
+        self.weightbce=weightBinaryloss()
+        self.focal = focalLoss(alpha,gamma)
+        self.bce=nn.BCELoss(reduction="mean")
+
+    def forward(self, input, target):
+        dice= 1-dice_coef(input, target)
+        bce=self.bce(input,target)
+        weightbce=self.weightbce(input,target)
+        # focal=self.focal(input, target)
+        loss=bce+dice+weightbce
+
+        return loss.mean()
+
+
+def metric(probability, truth, threshold=0.5, reduction='none'):
+    batch_size = len(truth)
+    with torch.no_grad():
+        probability = probability.view(batch_size, -1)
+        truth = truth.view(batch_size, -1)
+        assert(probability.shape == truth.shape)
+
+        p = (probability > threshold).float()
+        t = (truth > 0.5).float()
+
+        t_sum = t.sum(-1)
+        p_sum = p.sum(-1)
+        neg_index = torch.nonzero(t_sum == 0)
+        pos_index = torch.nonzero(t_sum >= 1)
+
+        dice_neg = (p_sum == 0).float()
+        dice_pos = 2 * (p*t).sum(-1)/((p+t).sum(-1))
+
+        dice_neg = dice_neg[neg_index]
+        dice_pos = dice_pos[pos_index]
+        dice = torch.cat([dice_pos, dice_neg])
+
+        num_neg = len(neg_index)
+        num_pos = len(pos_index)
+
+    return dice
+    
+          
 class Metric():
-    def __init__(self,cfg,device) -> None:
-        self.cfg=cfg
-        # self.metrics=[]
-        self.device=device
-        self.iou_fn=torchmetrics.JaccardIndex(num_classes=2, task="binary", average="macro").to(self.device)
-    def computeMetric(self,output,target):
-        metric={}
-        output=output.sigmoid()
-        output[output>=0.5]=1
-        output[output<0.5]=0
-    
-        print ( "sum target {}, sum output{} sum product {}".format (target.sum(),output.sum(), (target*output).sum()))
-        if output.sum()==0. and target.sum() ==0:          
-            metric["dice"]=1
-        else:
-            dice=2*(target*output).sum()/ (target.sum()+output.sum() )
-            metric["dice"]=dice.item()
-            # d(output,target,average="micro").item()
-        metric["iou"]=self.iou_fn(output,target).item()
-    
-        return metric
-    
+    def __init__(self):
+        self.positivedice=0
+        self.dicelist=[]
+        self.meandice=0
+    def compDice(self,y_pred,y_target):
+        batch_size=y_target.shape[0]
+        y_pred=y_pred.view(batch_size,-1)
+        y_pred[y_pred>=0.5]=1.
+        y_pred[y_pred<0.5]=0.
+        y_target=y_target.view(batch_size,-1)
+       
+        term=2* (y_target*y_pred).sum(-1)+1e-4
+        denom=y_target.sum(-1)+y_pred.sum(-1)+1e-4
+        dice=term/denom
+        return dice.mean(),term,denom
+        
+    def getMeanDice(self):
+            
+            return torch.mean(torch.stack(self.dicelist)) 
+
 class AverageMeter():
     def __init__(self) -> None:
         self.reset()
@@ -39,55 +117,8 @@ class AverageMeter():
         self.ls.append(item)
         self.avg=np.mean(self.ls)
 
-class CombineLoss(nn.Module):
-    def __init__(self,gamma) -> None:
-        super(CombineLoss,self).__init__()
-        self.gamma=gamma
 
-    def forward(self, output,target):
-        pass
-    def diceLoss(self,output,target):
-        # output is in range (0,1)
-        output=torch
-        return output*target
-    def focalLoss(self,output,target):
-        # output is in range (0,1)
-        ep=1e-4
-        output=output
-        if output<0.5:
-            output+=1e-10
-        else:
-            output-=1e-10
-        loss=-t.pow(1-output,self.gamma)*target*t.log(output)-t.pow(output,self.gamma)*(1-target)* t.log(1-output)
-        print ("loss {} ".format(loss))
-        return loss
+  
+    
         
-
-
-
-
-
-# output=torch.clamp(output,min=1e-10, max=0.9999999)
-
-#         positive=torch.sum(target,dim=0)
-#         negative= target.size()[0]-positive
-#         positive_factor= (1-self.beta)/ (1-self.beta**positive+1e-10)
-
-#         negative_factor=(1-self.beta)/ (1-self.beta**negative+1e-10)
-
-#         positive_factor=  positive_factor.unsqueeze(0).to(self.device)
-#         negative_factor= negative_factor.unsqueeze(0).to(self.device)
-
-#         positive_factor=torch.repeat_interleave(positive_factor, torch.tensor([target.size()[0]]).to(self.device), dim=0)
-#         negative_factor=torch.repeat_interleave(negative_factor, torch.tensor([target.size()[0]]).to(self.device), dim=0)
-
-#         # print ("positive_factor (1-beta)/ (1-beta**positive+1e-10) \n{}".format(positive_factor))
-#         # print ("negative_factor (1-beta)/ (1-beta**negative+1e-10)\n{}".format(negative_factor))
-#         loss=-positive_factor*target*torch.log(output)-(1-target)* negative_factor*torch.log(1-output)
-
-
-
-
-
-
 

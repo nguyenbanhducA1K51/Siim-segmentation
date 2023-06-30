@@ -12,16 +12,23 @@
         "size":"512"
     },
     "data":{
-        "useMiniData":"yes",
         "miniData":{
-            "train":50,
-            "val":5
+            "train":10000
+        
+        }
+        
+
+    },
+    "sampler":{
+        "type":"random",
+        "randomSampler":{
+            "number":10000
         }
 
     },
     "train":{
-        "epochs":1,
-        "batch_size":2,
+        "epochs":2,
+        "batch_size":6,
         "log_interval":1,
         "optimizer":{
             "name": "Adam",
