@@ -72,7 +72,7 @@ class SIIMnet():
         for epoch in range (1, self.cfg.train.epochs+1):
             self.train_epoch(dataLoader=trainLoader,epoch=epoch,model=self.model)
             self.eval(dataLoader=valLoader,model=self.model,epoch=epoch)
-            self.scheduler.step()
+            # self.scheduler.step()
     def loadModel(self):
         if self.cfg.model=="unet":
             return smp.Unet(

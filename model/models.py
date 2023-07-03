@@ -5,7 +5,6 @@ from torchvision import datasets, models, transforms
 import torch.nn.functional as F
 import sys
 from collections import OrderedDict
-
 # should train this unet to have pretrain weight
 class UNet(nn.Module):
    
@@ -164,40 +163,20 @@ class DenseUNet (nn.Module):
         x=self.up3(x)
         x=torch.cat([respath1,x],dim=1)
         x=self.decodeconv3(x)
-        x=self.almostlast(x)
-        y=self.sigmoid(x)
-       
+        x=self.almostlast(x)   
         return y
 
 
-# print (models.densenet121())
-# class newnet(nn.Module):
-#     def __init__(self):
-#         super(newnet,self).__init__()
-#         self.newclass1=nn.Linear(5,7)
-#         self.newclass2=nn.Linear(3,4)
-#     def forward(self,x):
-#         x=self. newclass1(x)
-#         return (x)
-# class net(nn.Module):
-#     def __init__(self):
-#         super(net,self).__init__()
-#         self.class1=nn.Linear(5,7)
-#         self.class2=nn.Linear(3,4)
-#     def forward(self,x):
-#         x=self.class1(x)
-#         return (x)
-# model= newnet()
-# # print (model)
-# torch.save({
-                
-#                 'model_state_dict': model.state_dict(),
-               
-#                 }, "/root/repo/Siim-segmentation/model/output/test.pth"
-#                 )
-# state_dict=torch.load("/root/repo/Siim-segmentation/model/output/test.pth")
-# # print (param["model_state_dict"]["class1.weight"])
-# newmodel=net()
-# with torch.no_grad():
-#     print ("before :{}".format(newmodel.class1.weight))
-#     print ("after : {}".format(newmodel.class1.weight.copy_(state_dict["model_state_dict"]['newclass1.weight'])))
+def pretrainDenseUnet(model):
+    pre=torch.load("/root/repo/Chexpert/chexpert/model/output/best_model.pth")
+    pretrain=pre["model_state_dict"]
+ 
+    with torch.no_grad():
+        model.sequenceLayer.conv0.weight.copy_(pretrain["dense.conv0.weight"])
+        for name, module in model.named_children():
+            if name.startswith("denseblock"):
+                for subname,submodule in getattr(model,name).named_children():
+                    # print("name {} subname {} submodule {}".format(name,subname,submodule))
+                    layer=getattr(getattr(model,name),subname )
+                    layer.conv1.weight.copy_(pretrain["dense.{}.{}.conv1.weight".format(name,subname)])
+                    layer.conv2.weight.copy_(pretrain["dense.{}.{}.conv2.weight".format(name,subname)])

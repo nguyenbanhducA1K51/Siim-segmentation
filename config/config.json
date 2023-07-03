@@ -13,21 +13,19 @@
     },
     "data":{
         "miniData":{
-            "train":10000
-        
-        }
-        
+            "train":10     
+        }      
 
     },
     "sampler":{
         "type":"random",
         "randomSampler":{
-            "number":10000
+            "number":10
         }
 
     },
     "train":{
-        "epochs":2,
+        "epochs":5,
         "batch_size":6,
         "log_interval":1,
         "optimizer":{

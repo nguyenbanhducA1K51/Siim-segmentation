@@ -11,6 +11,8 @@ from easydict import EasyDict as edict
 import warnings
 import logging
 
+
+# Suppress all warnings
 warnings.filterwarnings("ignore")
 cfg_path=os.path.dirname(os.path.abspath(__name__))+"/config/config.json"
 
@@ -19,5 +21,4 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 with open(cfg_path) as f:
     cfg = edict(json.load(f))
 trainLoader,valLoader=dataLoader.loadData(cfg=cfg)
-model=siim.SIIMnet(cfg=cfg,device=device)
-model.train_epochs(trainLoader=trainLoader,valLoader=valLoader)
+
