@@ -131,28 +131,20 @@ class DenseUNet (nn.Module):
         #encoder
         respath1=self.sequenceLayer(x)
         #64*128*128
-        # print ("1",x.shape)
         x=self.denseblock1(respath1)
         #256, 128, 128
-        # print ("res1",respath1.shape)
         respath2=self.transition1(x)
         #128, 64, 64
-        # print ("2",x.shape)
         x=self.denseblock2(respath2)
         #512, 64, 64
-        # print ("res2",respath2.shape)
         respath3=self.transition2(x)
         #256, 32, 32]
-        # print ("3",x.shape)
         x=self.denseblock3(respath3)
         # 1024, 32, 32
-        # print ("res3",respath3.shape)
         respath4=self.transition3(x)
         #512,16,16
-        # print ("4",x.shape)
         x=self.denseblock4(respath4)
         #1024,16,16
-        # print ("res4",respath4.shape)
         x=self.norm5(x)    
         x= self.up1(x)
         x=torch.cat([respath3,x],dim=1)
