@@ -62,12 +62,18 @@ class SIIMnet():
                     y_true=y_true.to(self.device).float()
                     y_hat=torch.sigmoid(y_hat)
                     dice,term,denom=diceMetric.compDice(y_hat,y_true)  
+                    loss=self.criterion(y_hat,y_true)
+                    losses.update(loss.item())
                     diceList.append(dice)      
                     if idx%4==0:
                         tepoch.set_postfix(curdice=dice.item(),term=term.item(),denom=denom.item())
                 meandice=torch.stack (diceList,0).mean()
                 print (" mean dice score {:3f}  ".format(meandice ))
-                
+                return {
+                    "loss":losses.avg,
+                    "dice":meandice.item()
+
+                }
     def train_epochs(self,trainLoader,valLoader):
         for epoch in range (1, self.cfg.train.epochs+1):
             self.train_epoch(dataLoader=trainLoader,epoch=epoch,model=self.model)
@@ -89,7 +95,24 @@ class SIIMnet():
     def loadCriterion(self):
         return modelUtils.MixedLoss(gamma= 2.0,alpha=1)
        
-         
+    def visualizeNoLabel(self,input):
+        model.eval()
+        with torch.no_grad():
+            input=input.to(self.device)
+            y_pred=model(input)
+            y_pred[y_pred>=0.5]=1.
+            y_pred[y_pred<0.5]=0.
+            plt.figure(figsize=(16, 8))
+            fig,ax=
+            plt.imshow(input.transpose(1,2,0), vmin=0, vmax=1)
+            if y_pred.max()>0:
+                print ("predict has disease")
+                plt.imshow(mask.squeeze(0), alpha=0.25)
+            plt.show()
+            fig.savefig("/root/repo/Siim-segmentation/model/output/unlabel_predict.png")
+    def visualizeWithLabel(self,input,target)
+
+
     
 
 

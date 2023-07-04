@@ -93,9 +93,9 @@ def loadData(cfg, mode="default"):
     trainsampler=trainset.getsampler()
     testset = SiimDatast(cfg=cfg,csv_file=cfg.path.testCsv, transform=valTransform, mode="test")
     trainLoader = torch.utils.data.DataLoader(
-        trainset, batch_size=batch_size, sampler=trainsampler if trainsampler is not None else None, shuffle=True if trainsampler is  None else False)
+        trainset,num_workers=8, batch_size=batch_size, sampler=trainsampler if trainsampler is not None else None, shuffle=True if trainsampler is  None else False)
     testLoader = torch.utils.data.DataLoader(
-        testset, batch_size=1)
+        testset, num_workers=8,batch_size=1)
     return trainLoader,testLoader
 
 class PneumoSampler(Sampler):

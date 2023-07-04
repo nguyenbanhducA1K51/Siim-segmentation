@@ -5,120 +5,77 @@ import numpy as np
 import torch.nn as nn
 import torch    
 import torch.nn.functional as F 
-class focalLoss(nn.Module):
-    def __init__(self,gamma,alpha=1):
-        super().__init__()
-        self.gamma=gamma
-        self.alpha=alpha
+from datetime import datetime
+import matplotlib.pyplot as plt
+import os 
+class SaveBestModel:
+    # this class only work for each training
+    """
+    Class to save the best model while training. If the current epoch's 
+    validation dice is higher than saved metric, then save the
+    model state.
+    """
+    def __init__(
+        self, cfg,best_valid_dice=-float('inf'),threshold=0.75
+    ):
+        self.best_valid_dice = best_valid_dice
+        self.cfg=cfg
+        self.threshold=threshold
         
-    def forward(self,input,target):
-        if input.max()>1. :
-            print ("inputs >1")
-        ep=1e-7
-        iflat=input.view(input.shape[0], -1)
-        tflat=target.view(input.shape[0], -1)
-        iflat=iflat.clamp(ep,1-ep)
-        loss = -1 * torch.log(iflat) * tflat.float() # cross entropy
-        loss = self.alpha * loss * (1 - iflat) ** self.gamma #
-        return loss.mean()
-class weightBinaryloss(nn.Module):
-    def __init__(self,beta=4):
-        super().__init__()
-        self.beta=beta
-    def forward(self,input,target):
-        ep=1e-7
-        input=torch.clamp(input,min=ep, max=1-ep)  
-        loss=-self.beta*target*torch.log(input)-(1-target)* torch.log(1-input)
-        return loss.mean()
-   
-def dice_coef(input, target):
-    # input in range(0,1)
-    smooth = 1.0
-    iflat = input.view(-1)
-    tflat = target.view(-1)
-    intersection = (iflat * tflat).sum()
-    dice=(2.0 * intersection + smooth) / (iflat.sum() + tflat.sum() + smooth)   
-    return dice
-class MixedLoss(nn.Module):
-    def __init__(self,  gamma,alpha=1):
-        super().__init__()
-        self.weightbce=weightBinaryloss()
-        self.focal = focalLoss(alpha,gamma)
-        self.bce=nn.BCELoss(reduction="mean")
+    def __call__(
+        self, metric, 
+        epoch, model, optimizer, criterion
+    ):
+        if int(self.cfg.sampler.randomSampler)>=100000 and metric.dice>self.threshold:
+            now = datetime.now() 
+            dt_string = now.strftime("%d-%m-%Y-%H:%M:%S")
+            file_path=os.path.dirname(os.path.abspath(__name__))+"/model/output/model_state_dict/dice:{}-{}.pth".format(metric["dice"],dt_string)
+            with open(file_path, 'w') as file:
+                file.write()
+            if metric["dice"] > self.best_valid_dice:
+                self.best_valid_dice= metrics["dice"]
+                print(f"\nBest validation dice score: {self.best_valid_dice}")
+                print(f"\nSaving best model for epoch: {epoch}\n")
+                torch.save({
+                    'metric':metric,
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    
+                    }, file_path)
+class save_plot():
+    def __init__(self,cfg,threshold):
+        self.cfg=cfg
+        self.threshold=threshold
+    def save(train_metrics,val_metrics):
+        if int(self.cfg.sampler.randomSampler)>=100000 :
+            now = datetime.now() 
+            dt_string = now.strftime("%d-%m-%Y-%H:%M:%S")
+            file_path=os.path.dirname(os.path.abspath(__name__))+"/model/output/learning_analysis/{}.png".format(dt_string)
+            train_losses=[]
+            val_losses=[]
+            val_dice=[]
+            for metric in train_metric:
+                train_losses.append(metric["loss"])
+            for metric in val_metric:
+                val_losses.append(metric["loss"])
+                val_dice.append(metric["dice"]*100)
+            fig,ax=plt.subplots(2)
+            ax[0].plot(train_losses,label="train loss")
+            ax[0].plot(val_losses,label="val loss")
+            ax[0].set(xlabel="epoch")
+            ax[0].set_title("Loss statistic")
+            ax[1].plot(val_dice,label="val dice score")
+            ax[1].set_title("Dice statistic")
+            ax[1].set(xlabel="epoch",ylabel="percent")
+            fig.tight_layout()
+            plt.show()
+            fig.savefig(file_path)
 
-    def forward(self, input, target):
-        dice= 1-dice_coef(input, target)
-        bce=self.bce(input,target)
-        weightbce=self.weightbce(input,target)
-        # focal=self.focal(input, target)
-        loss=bce+dice+weightbce
 
-        return loss.mean()
-
-
-def metric(probability, truth, threshold=0.5, reduction='none'):
-    batch_size = len(truth)
-    with torch.no_grad():
-        probability = probability.view(batch_size, -1)
-        truth = truth.view(batch_size, -1)
-        assert(probability.shape == truth.shape)
-
-        p = (probability > threshold).float()
-        t = (truth > 0.5).float()
-
-        t_sum = t.sum(-1)
-        p_sum = p.sum(-1)
-        neg_index = torch.nonzero(t_sum == 0)
-        pos_index = torch.nonzero(t_sum >= 1)
-
-        dice_neg = (p_sum == 0).float()
-        dice_pos = 2 * (p*t).sum(-1)/((p+t).sum(-1))
-
-        dice_neg = dice_neg[neg_index]
-        dice_pos = dice_pos[pos_index]
-        dice = torch.cat([dice_pos, dice_neg])
-
-        num_neg = len(neg_index)
-        num_pos = len(pos_index)
-
-    return dice
-    
-          
-class Metric():
-    def __init__(self):
-        self.positivedice=0
-        self.dicelist=[]
-        self.meandice=0
-    def compDice(self,y_pred,y_target):
-        batch_size=y_target.shape[0]
-        y_pred=y_pred.view(batch_size,-1)
-        y_pred[y_pred>=0.5]=1.
-        y_pred[y_pred<0.5]=0.
-        y_target=y_target.view(batch_size,-1)
-       
-        term=2* (y_target*y_pred).sum(-1)+1e-4
-        denom=y_target.sum(-1)+y_pred.sum(-1)+1e-4
-        dice=term/denom
-        return dice.mean(),term,denom
-        
-    def getMeanDice(self):
             
-            return torch.mean(torch.stack(self.dicelist)) 
 
-class AverageMeter():
-    def __init__(self) -> None:
-        self.reset()
-    def reset(self):
-        self.cur=0
-        self.ls=[]
-        self.avg=0
-    def update(self,item):
-        self.cur=item
-        self.ls.append(item)
-        self.avg=np.mean(self.ls)
-
-
-  
-    
         
+
+            
 

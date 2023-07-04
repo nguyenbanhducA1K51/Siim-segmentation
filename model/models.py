@@ -6,92 +6,6 @@ import torch.nn.functional as F
 import sys
 from collections import OrderedDict
 # should train this unet to have pretrain weight
-class UNet(nn.Module):
-   
-    # Unet model require down width to be divisible by 16 
-    def __init__(self, n_classes):
-        super().__init__()
-        self.n_classes = n_classes
-        self.downsample = nn.MaxPool2d(2)
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear")
-        self.block_down1 = self.unet_block(3, 64)
-        self.block_down2 = self.unet_block(64, 128)
-        self.block_down3 = self.unet_block(128, 256)
-        self.block_down4 = self.unet_block(256, 512)
-        self.block_neck = self.unet_block(512, 1024)
-        self.block_up1 = self.unet_block(1024+512, 512)
-        self.block_up2 = self.unet_block(256+512, 256)
-        self.block_up3 = self.unet_block(128+256, 128)
-        self.block_up4 = self.unet_block(128+64, 64)
-        if self.n_classes==2:
-
-            self.conv_cls = nn.Conv2d(64, 1, 1) # -> (B, n_class, H, W)
-        else:
-            self.conv_cls = nn.Conv2d(64, self.n_classes, 1)
-
-    
-    def forward(self, x):
-        # (B, C, H, W)
-        x1 = self.block_down1(x)
-        x = self.downsample(x1)
-        x2 = self.block_down2(x)
-        x = self.downsample(x2)
-        x3 = self.block_down3(x)
-        x = self.downsample(x3)
-        x4 = self.block_down4(x)
-        x = self.downsample(x4)
-
-        x = self.block_neck(x)
-
-        x = torch.cat([x4, self.upsample(x)], dim=1)
-        x = self.block_up1(x)
-        x = torch.cat([x3, self.upsample(x)], dim=1)
-        x = self.block_up2(x)
-        x = torch.cat([x2, self.upsample(x)], dim=1)
-        x = self.block_up3(x)
-        x = torch.cat([x1, self.upsample(x)], dim=1)
-        x = self.block_up4(x)
-
-        x = self.conv_cls(x)
-        return x
-    def unet_block(self,in_channels, out_channels):
-        return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, 1, 1),
-            nn.ReLU(),
-            nn.Conv2d(out_channels, out_channels, 3, 1, 1),
-            nn.ReLU()
-        )     
-#image size: 1024*1024
-class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels,mid_channels):
-        super().__init__()
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        return self.double_conv(x)
-class Up(nn.Module):
-    """Upscaling then double conv"""
-    def __init__(self, in_channels, out_channels, bilinear=True):
-        super().__init__()
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            self.conv = DoubleConv(in_channels, out_channels)
-
-    def forward(self, x):
-        x = self.up(x)
-        x=self.conv(x)     
-        return x
-
 class DenseUNet (nn.Module):
     def __init__ (self,imageSize,numclass):
         super(DenseUNet, self).__init__()
@@ -112,7 +26,6 @@ class DenseUNet (nn.Module):
         self.transition3=denseNet.features.transition3
         self.denseblock4=denseNet.features.denseblock4
         self.norm5=denseNet.features.norm5
-
         self.pool=nn.MaxPool2d(2)
         self.bottleNeck=DoubleConv(1024,1024,1024)       
         self.up1= Up(1024,256)
@@ -160,15 +73,13 @@ class DenseUNet (nn.Module):
 
 
 def pretrainDenseUnet(model):
-    pre=torch.load("/root/repo/Chexpert/chexpert/model/output/best_model.pth")
-    pretrain=pre["model_state_dict"]
- 
+    state_dict=torch.load("/root/repo/Chexpert/chexpert/model/output/best_model.pth")
+    pretrain=state_dict["model_state_dict"]
     with torch.no_grad():
         model.sequenceLayer.conv0.weight.copy_(pretrain["dense.conv0.weight"])
         for name, module in model.named_children():
             if name.startswith("denseblock"):
                 for subname,submodule in getattr(model,name).named_children():
-                    # print("name {} subname {} submodule {}".format(name,subname,submodule))
                     layer=getattr(getattr(model,name),subname )
                     layer.conv1.weight.copy_(pretrain["dense.{}.{}.conv1.weight".format(name,subname)])
                     layer.conv2.weight.copy_(pretrain["dense.{}.{}.conv2.weight".format(name,subname)])

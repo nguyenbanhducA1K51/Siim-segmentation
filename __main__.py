@@ -21,4 +21,6 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 with open(cfg_path) as f:
     cfg = edict(json.load(f))
 trainLoader,valLoader=dataLoader.loadData(cfg=cfg)
+model=siim.SIIMnet(cfg=cfg,device=device)
+model.train_epochs(trainLoader,valLoader)
 
