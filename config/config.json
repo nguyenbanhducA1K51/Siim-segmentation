@@ -1,5 +1,6 @@
 {
     "path":{
+        "repo_path":"/root/repo/Siim-segmentation",
         "pngImages":"/root/data/siim-acr-pneumothorax/png_images",
         "pngMasks":"/root/data/siim-acr-pneumothorax/png_masks",
         "testCsv":"/root/data/siim-acr-pneumothorax/stage_1_test_images.csv",
@@ -30,8 +31,11 @@
         }  
     },
     "criterion":"bce",
-    "model": "unet"
-    
+    "model": "unet",
+    "tta":{
+        "usetta":"True",
+        "times":10
+    }
 
 
 
