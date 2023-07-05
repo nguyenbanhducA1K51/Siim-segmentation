@@ -32,7 +32,6 @@ class SaveBestModel:
         self, metric, 
         epoch, model, optimizer
     ):
-
         # if self.cfg.sampler.randomSampler.number>=100000 and metric["dice"]>self.best_dice_score:
             self.best_dice_score=metric["dice"]
             write_json(key="best_dice_score",val=metric["dice"],filename=path)       
@@ -67,13 +66,15 @@ class Save_plot():
                 val_losses.append(metric["loss"])
                 val_dice.append(metric["dice"]*100)
             fig,ax=plt.subplots(2)
-            ax[0].plot(train_losses,label="train loss")
-            ax[0].plot(val_losses,label="val loss")
+            ax[0].plot(train_losses,label="train loss",color="green",marker="o")
+            ax[0].plot(val_losses,label="val loss",color="blue",marker="o")
             ax[0].set(xlabel="epoch")
             ax[0].set_title("Loss statistic")
-            ax[1].plot(val_dice,label="val dice score")
+            ax[1].plot(val_dice,label="val dice score",color="blue",marker="o")
             ax[1].set_title("Dice statistic")
             ax[1].set(xlabel="epoch",ylabel="percent")
+            ax[0].legend()
+            ax[1].legend()
             fig.tight_layout()
             plt.show()
             fig.savefig(file_path)
@@ -86,6 +87,52 @@ def write_json(key,val, filename):
 
     with open(filename, 'w') as file:
         json.dump(data, file, indent=4)
+
+def recordTraining(epoch=0,cfg=None, metric=None):  
+    
+    # if int(cfg.mini_data.train)>=100000:
+        now = datetime.now()   
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        filePath=os.path.dirname(os.path.abspath(__name__))+"/model/output/recordTraining.csv"
+        with open(filePath, "a") as file:
+            
+            mean_dice=metric["dice"] 
+            model=cfg.model  
+            sample=cfg.sampler.randomSampler.number  
+            epoch=str(epoch)+"/"+str(cfg.train.epochs)
+            op=cfg.train.optimizer.lr
+            lr=cfg.train.optimizer.lr
+            criterion=cfg.criterion                   
+            batch_size=cfg.train.batch_size
+                      
+            use_progressive_training=cfg.progressive_train.use
+            totalProgressiveEpoch=cfg.progressive_train.epochs
+            progressiveOP=cfg.progressive_train.optimizer.name
+            progressivelr=cfg.progressive_train.optimizer.lr        
+            usetta=cfg.tta.usetta 
+            tta_times=cfg.tta.times 
+
+            finalString=""
+            finalString+=dt_string+","
+            finalString+=str(mean_dice)+","
+            finalString+=str(model)+","
+            finalString+=str(sample)+","
+            finalString+=str(epoch)+","
+            finalString+=str(op)+","
+            finalString+=str(lr)+","
+            finalString+=str(criterion)+","
+            finalString+=str(batch_size)+","
+            
+            finalString+=str(use_progressive_training)+","
+            finalString +=str(totalProgressiveEpoch)+","
+            finalString+=str(progressiveOP)+","
+            finalString+=str(progressivelr)+","
+            finalString+=str(usetta)+","   
+            finalString+=str(tta_times)+","    
+            # print (finalString)
+            file.write('\n'+finalString)
+
+
     
 
 

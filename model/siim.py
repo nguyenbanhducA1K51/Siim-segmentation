@@ -118,11 +118,6 @@ class SIIMnet():
                 "dice":dice,
                 "loss":out_losses
                 }
-                # stack_y_preds=torch.stack(y_preds)
-                # sum_y_preds= torch.sum(stack_y_preds, dim=0)
-                # avg_y_preds=sum_y_preds/self.cfg.tta.time
-                # meandice=torch.stack (diceList,0).mean().item()
-
 
     def train_epochs(self):
         train_metrics=[]
@@ -132,10 +127,10 @@ class SIIMnet():
             val_metric=self.eval(dataLoader=self.val_loader,model=self.model,epoch=epoch)
             train_metrics.append(train_metric)
             val_metrics.append(val_metric)
+            modelUtils.recordTraining(epoch=epoch,cfg=self.cfg, metric=val_metric)
             self.save_best_model(val_metric,epoch,self.model,self.optimizer)
 
-        self.save_plot.save(train_metrics=train_metrics,val_metrics=val_metrics)
-        
+        self.save_plot.save(train_metrics=train_metrics,val_metrics=val_metrics)      
             # self.scheduler.step()
     def loadModel(self):
         if self.cfg.model=="unet":

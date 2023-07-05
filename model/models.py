@@ -5,7 +5,7 @@ from torchvision import datasets, models, transforms
 import torch.nn.functional as F
 import sys
 from collections import OrderedDict
-# should train this unet to have pretrain weight
+
 class DenseUNet (nn.Module):
     def __init__ (self,imageSize,numclass):
         super(DenseUNet, self).__init__()

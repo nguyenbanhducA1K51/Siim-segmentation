@@ -1,0 +1,7 @@
+time,average dice,model,samples,epoch,optimizer,lr,criterion,batch size,use progressive training,total progressive training epoch,progressive optimizer,progressive lr,use tta, tta times
+05/07/2023 08:51:22,0.006530449725687504,unet,10,1/2,0.0001,0.0001,mixed,8,False,2,Adam,0.0001,True,10,
+05/07/2023 08:51:27,0.0007129157893359661,unet,10,2/2,0.0001,0.0001,mixed,8,False,2,Adam,0.0001,True,10,
+05/07/2023 09:27:41,0.006333171855658293,unet,10,1/2,0.0001,0.0001,mixed,8,False,2,Adam,0.0001,True,10,
+05/07/2023 09:27:46,0.001145630027167499,unet,10,2/2,0.0001,0.0001,mixed,8,False,2,Adam,0.0001,True,10,
+05/07/2023 09:30:55,4.5495696099351335e-08,unet,10,1/2,0.0001,0.0001,mixed,8,False,2,Adam,0.0001,True,10,
+05/07/2023 09:31:00,0.0014534996589645743,unet,10,2/2,0.0001,0.0001,mixed,8,False,2,Adam,0.0001,True,10,
