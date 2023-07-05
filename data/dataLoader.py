@@ -48,15 +48,7 @@ class SiimDatast(Dataset):
             mask=transformed["mask"]
         
         return oriIndex, image,mask
-    def visualize(self,idx):
-        _,image,mask=self.__getitem__(idx)
-        fig,ax=plt.subplots(2)
-        ax[0].imshow(image.reshape(512,512,3))
-        ax[1].imshow(mask,cmap="gray")
-        plt.show()
-        path= 
-        plt.savefig("/root/repo/Siim-segmentation/data/visualize2.png")
-        
+    
     def getsampler(self):
             if self.cfg.sampler.type=="ratio":                
                 return  PneumoSampler(cfg=self.cfg,df=self.df,mode=self.mode)
@@ -91,13 +83,20 @@ def loadData(cfg, mode="default"):
     trainset = SiimDatast(cfg=cfg,csv_file=cfg.path.trainCsv,transform=trainTransform , mode="train")
     trainsampler=trainset.getsampler()
     testset = SiimDatast(cfg=cfg,csv_file=cfg.path.testCsv, transform=valTransform, mode="test")
-    
+    valsampler=testset.getsampler()
     trainLoader = torch.utils.data.DataLoader(
         trainset,num_workers=8,pin_memory=True, batch_size=cfg.train.batch_size , sampler=trainsampler if trainsampler is not None else None, shuffle=True if trainsampler is  None else False)
     testLoader = torch.utils.data.DataLoader(
-        testset, num_workers=8,batch_size=1,pin_memory=True)
+        testset, num_workers=8,batch_size=1,pin_memory=True,sampler=valsampler )
     return trainLoader,testLoader
 def tta_testLoader(cfg):
+    def norm (mask,*args,**kargs):
+        mask=mask/255
+        mask.astype(float) 
+        return mask
+    def stackChannel(image,*args,**kargs):
+        image=np.expand_dims(image,axis=0)
+        return np.repeat(image,3,axis=0)
     val_transform = A.Compose([
         A.ShiftScaleRotate( rotate_limit=15),
         A.HorizontalFlip(),
@@ -106,10 +105,10 @@ def tta_testLoader(cfg):
         A.Lambda(image=stackChannel, mask=norm),
        
     ])
-    testset = SiimDatast(cfg=cfg,csv_file=cfg.path.testCsv, transform=valTransform, mode="test")
+    testset = SiimDatast(cfg=cfg,csv_file=cfg.path.testCsv, transform=val_transform, mode="test")
     test_loader = torch.utils.data.DataLoader(
         testset, num_workers=8,batch_size=1,pin_memory=True)
-        return test_loader
+    return test_loader
 
 class PneumoSampler(Sampler):
     def __init__(self, cfg,df,mode, positive_perc=0.8):

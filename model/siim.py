@@ -8,7 +8,7 @@ import tqdm
 import sys
 sys.path.append("../data")
 from data import dataUtil,dataLoader
-import modelUtils, models,metric
+from . import modelUtils,models,metric
 from torch.optim import Adam
 import torch.optim as optim
 import segmentation_models_pytorch as smp
@@ -27,7 +27,7 @@ class SIIMnet():
         self.save_plot=modelUtils.Save_plot(cfg=cfg)
         self.save_best_model=modelUtils.SaveBestModel(cfg=cfg)
         self.train_loader,self.val_loader=dataLoader.loadData(cfg=self.cfg)
-        self.tta_test_loader=dataLoader.tta_test_loader(cfg=cfg)
+        self.tta_test_loader=dataLoader.tta_testLoader(cfg=cfg)
         
     def train_epoch(self,dataLoader,model,epoch):
         losses=metric.AverageMeter()
@@ -40,16 +40,16 @@ class SIIMnet():
                 x=x.to(self.device).float()
                 y_true=y_true.to(self.device).float()  
                 y_hat=model(x).squeeze(1) 
-                y_hat=y_hat.sigmoid()
-                
+                y_hat=y_hat.sigmoid()           
                 loss=self.criterion(y_hat,y_true)
-                losses.update(loss.item)
+                losses.update(loss.item())
                 loss.backward()   
                 self.optimizer.step()
                 if idx % log_interval == 0:                   
                         tepoch.set_postfix(loss=loss.item())
+        print ("loss avg",losses.avg)
         return {
-            loss:losses.avg
+            "loss":losses.avg
         }
         print ("-"*100)
 
@@ -72,7 +72,7 @@ class SIIMnet():
                     diceList.append(dice)      
                     if idx%4==0:
                         tepoch.set_postfix(curdice=dice.item(),term=term.item(),denom=denom.item())
-                meandice=torch.stack (diceList,0).mean().item()
+                meandice=torch.stack (diceList,0).mean().item() 
                 print (" mean dice score {:3f}  ".format(meandice ))
                 return {
                     "loss":losses.avg,
@@ -102,7 +102,7 @@ class SIIMnet():
                         predmask.append(y_hat)
                         truemask.append(y_true)                        
                         if idx%4==0:
-                            tepoch.set_postfix(loss = loss.item()))
+                            tepoch.set_postfix(loss = loss.item())
                 predmask=torch.concat(predmask,dim=0)  
                 truemask=torch.concat(truemask,dim=0)
                 losses=sum(losses)/len(losses)
@@ -124,12 +124,12 @@ class SIIMnet():
                 # meandice=torch.stack (diceList,0).mean().item()
 
 
-    def train_epochs(self,trainLoader,valLoader):
+    def train_epochs(self):
         train_metrics=[]
         val_metrics=[]
         for epoch in range (1, self.cfg.train.epochs+1):
-            train_metric=self.train_epoch(dataLoader=trainLoader,epoch=epoch,model=self.model)
-            val_metric=self.eval(dataLoader=valLoader,model=self.model,epoch=epoch)
+            train_metric=self.train_epoch(dataLoader=self.train_loader,epoch=epoch,model=self.model)
+            val_metric=self.eval(dataLoader=self.val_loader,model=self.model,epoch=epoch)
             train_metrics.append(train_metric)
             val_metrics.append(val_metric)
             self.save_best_model(val_metric,epoch,self.model,self.optimizer)
