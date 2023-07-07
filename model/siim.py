@@ -28,7 +28,7 @@ class SIIMnet():
         self.save_best_model=modelUtils.SaveBestModel(cfg=cfg)
         self.train_loader,self.val_loader=dataLoader.loadData(cfg=self.cfg)
         self.tta_test_loader=dataLoader.tta_testLoader(cfg=cfg)
-        
+        self.test_size=min(self.cfg.sampler.randomSampler.number,len(self.tta_test_loader.dataset))
     def train_epoch(self,dataLoader,model,epoch):
         losses=metric.AverageMeter()
         log_interval=self.cfg.train.log_interval
@@ -47,7 +47,6 @@ class SIIMnet():
                 self.optimizer.step()
                 if idx % log_interval == 0:                   
                         tepoch.set_postfix(loss=loss.item())
-        print ("loss avg",losses.avg)
         return {
             "loss":losses.avg
         }
@@ -55,8 +54,7 @@ class SIIMnet():
 
     def eval (self,dataLoader,model,epoch):
         model.eval()
-        losses=metric.AverageMeter()
-        
+        losses=metric.AverageMeter()       
         diceMetric=metric.Metric()
         diceList=[]
         with torch.no_grad():
@@ -80,14 +78,15 @@ class SIIMnet():
 
                 }
     def tta_eval(self,dataLoader,model,epoch):
+        print ("Eval tta epoch {}".format(epoch))
         model.eval()
-        out_preds=[]
-        out_true
         out_losses=[]
         diceMetric=metric.Metric()
+        init=True
+        out_preds=torch.zeros(self.test_size,self.cfg.image.size,self.cfg.image.size).to(self.device)
+        out_true=torch.zeros(self.test_size,self.cfg.image.size,self.cfg.image.size).to(self.device)
         with torch.no_grad():
-            for i in range (self.cfg.tta.time):
-                diceList=[]              
+            for i in range (self.cfg.tta.times):                             
                 losses=[]
                 predmask=[]
                 truemask=[]
@@ -99,32 +98,35 @@ class SIIMnet():
                         y_hat=torch.sigmoid(y_hat)
                         loss=self.criterion(y_hat,y_true)
                         losses.append (loss.item())
-                        predmask.append(y_hat)
+                        predmask.append(y_hat)                   
                         truemask.append(y_true)                        
                         if idx%4==0:
                             tepoch.set_postfix(loss = loss.item())
                 predmask=torch.concat(predmask,dim=0)  
                 truemask=torch.concat(truemask,dim=0)
-                losses=sum(losses)/len(losses)
-                out_preds.append(predmask)
-                out_true.append(truemask)
+                losses=sum(losses)/len(losses)              
+                out_preds+=predmask
+                out_true+=truemask
                 out_losses.append(losses)
-            avg_preds=out_preds/self.cfg.tta.time
-            out_true=out_true.self.cfg.tta.time
+            out_preds=(out_preds/self.cfg.tta.times).sigmoid()
+            out_true=out_true/self.cfg.tta.times
             out_losses=sum(out_losses)/len(out_losses)
-            dice,_,_=diceMetric.compDice(avg_preds,out_true)  
+            dice,_,_=diceMetric.compDice(out_preds,out_true)  
             print (" Avg dice with tta :{}".format(dice))
             return {
-                "dice":dice,
-                "loss":out_losses
+                "dice":dice.item(),
+                "loss":[]
+                # "loss":out_losses
                 }
-
     def train_epochs(self):
         train_metrics=[]
         val_metrics=[]
         for epoch in range (1, self.cfg.train.epochs+1):
             train_metric=self.train_epoch(dataLoader=self.train_loader,epoch=epoch,model=self.model)
-            val_metric=self.eval(dataLoader=self.val_loader,model=self.model,epoch=epoch)
+            if self.cfg.tta.usetta=="False":
+                val_metric=self.eval(dataLoader=self.val_loader,model=self.model,epoch=epoch)
+            else:
+                val_metric=self.tta_eval(dataLoader=self.tta_test_loader,model=self.model,epoch=epoch)
             train_metrics.append(train_metric)
             val_metrics.append(val_metric)
             modelUtils.recordTraining(epoch=epoch,cfg=self.cfg, metric=val_metric)
@@ -140,6 +142,8 @@ class SIIMnet():
             classes=1, 
             activation=None,
         )
+        elif self.cfg.model=="denseUnet":
+            return models.DenseUNet(imageSize=self.cfg.image.size,numclass=1)
     def load_model_ckp(self):
         state_dict=torch.load(os.path.dirname(os.path.abspath(__name__))+"/model/output/best_model.pth")
         print ("Load model check point with dice score = {}".format(state_dict["metric"]["dice"]))

@@ -32,7 +32,7 @@ class SaveBestModel:
         self, metric, 
         epoch, model, optimizer
     ):
-        # if self.cfg.sampler.randomSampler.number>=100000 and metric["dice"]>self.best_dice_score:
+        if metric["dice"]>self.best_dice_score:
             self.best_dice_score=metric["dice"]
             write_json(key="best_dice_score",val=metric["dice"],filename=path)       
             now = datetime.now() 
@@ -90,13 +90,13 @@ def write_json(key,val, filename):
 
 def recordTraining(epoch=0,cfg=None, metric=None):  
     
-    # if int(cfg.mini_data.train)>=100000:
+    if int(cfg.sampler.randomSampler.number)>=100000:
         now = datetime.now()   
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
         filePath=os.path.dirname(os.path.abspath(__name__))+"/model/output/recordTraining.csv"
         with open(filePath, "a") as file:
             
-            mean_dice=metric["dice"] 
+            mean_dice=round(metric["dice"] ,3)
             model=cfg.model  
             sample=cfg.sampler.randomSampler.number  
             epoch=str(epoch)+"/"+str(cfg.train.epochs)

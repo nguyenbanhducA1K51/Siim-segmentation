@@ -90,6 +90,8 @@ def loadData(cfg, mode="default"):
         testset, num_workers=8,batch_size=1,pin_memory=True,sampler=valsampler )
     return trainLoader,testLoader
 def tta_testLoader(cfg):
+    df = pd.read_csv(cfg.path.testCsv)
+    sampler=RandomSampler(cfg=cfg,mode="tta eval ",df=df)
     def norm (mask,*args,**kargs):
         mask=mask/255
         mask.astype(float) 
@@ -107,7 +109,7 @@ def tta_testLoader(cfg):
     ])
     testset = SiimDatast(cfg=cfg,csv_file=cfg.path.testCsv, transform=val_transform, mode="test")
     test_loader = torch.utils.data.DataLoader(
-        testset, num_workers=8,batch_size=1,pin_memory=True)
+        testset, num_workers=8,batch_size=1,pin_memory=True,sampler=sampler)
     return test_loader
 
 class PneumoSampler(Sampler):
@@ -132,7 +134,7 @@ class RandomSampler(Sampler):
     def __init__(self,cfg,mode,df):
        
         self.cfg=cfg
-        self.samples=cfg.sampler.randomSampler.number
+        self.samples=min(cfg.sampler.randomSampler.number,len(df))
         self.df=df
         print (" Total random samples {}: ".format(self.samples))
     def __len__(self):

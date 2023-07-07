@@ -10,7 +10,7 @@
 
     },
     "image":{
-        "size":"512"
+        "size":512
     },
    
     "sampler":{
@@ -21,7 +21,7 @@
 
     },
     "train":{
-        "epochs":2,
+        "epochs":3,
         "batch_size":8,
         "log_interval":4,
         "optimizer":{
@@ -42,10 +42,11 @@
         }  
     },
     "criterion":"mixed",
-    "model": "unet",
+    "model": "denseUnet",
     "tta":{
         "usetta":"True",
-        "times":10
+        "times":2
+
     }
 
 
