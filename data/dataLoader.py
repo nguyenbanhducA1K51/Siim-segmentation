@@ -84,10 +84,11 @@ def loadData(cfg, mode="default"):
     trainsampler=trainset.getsampler()
     testset = SiimDatast(cfg=cfg,csv_file=cfg.path.testCsv, transform=valTransform, mode="test")
     valsampler=testset.getsampler()
+    num_workers=8
     trainLoader = torch.utils.data.DataLoader(
-        trainset,num_workers=8,pin_memory=True, batch_size=cfg.train.batch_size , sampler=trainsampler if trainsampler is not None else None, shuffle=True if trainsampler is  None else False)
+        trainset,num_workers=num_workers,pin_memory=True, batch_size=cfg.train.batch_size , sampler=trainsampler if trainsampler is not None else None, shuffle=True if trainsampler is  None else False)
     testLoader = torch.utils.data.DataLoader(
-        testset, num_workers=8,batch_size=1,pin_memory=True,sampler=valsampler )
+        testset, num_workers=num_workers,batch_size=1,pin_memory=True,sampler=valsampler )
     return trainLoader,testLoader
 def tta_testLoader(cfg):
     df = pd.read_csv(cfg.path.testCsv)
@@ -143,7 +144,23 @@ class RandomSampler(Sampler):
         shuffle=np.random.choice(np.arange(0,len(self.df)),size=self.samples)
         return iter(shuffle)
 
+class Tta():
+    def __init__(self):
+        return
+    def get_tta_transform(self):
+        transforms=[]
+        transforms.append((forward_horiz,backward_horiz))
+        transform.append((forward_identity,backward_identity))
+        return transforms
 
+def forward_horiz(image):
+    return image.flip(-1)
+def backward_horiz(image):
+    return image.flip(-1)
+def forward_identity(image):
+    return image
+def backward_identity(image):
+    return image
 
 
 

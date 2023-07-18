@@ -53,7 +53,7 @@ class Save_plot():
         self.cfg=cfg
         self.threshold=threshold
     def save(self,train_metrics,val_metrics):
-        # if self.cfg.sampler.randomSampler.number>=100000 :
+        if self.cfg.sampler.randomSampler.number>=100000 :
             now = datetime.now() 
             dt_string = now.strftime("%d-%m-%Y-%H:%M:%S")
             file_path=os.path.dirname(os.path.abspath(__name__))+"/model/output/learning_analysis/{}.png".format(dt_string)

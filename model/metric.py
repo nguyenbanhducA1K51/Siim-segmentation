@@ -6,29 +6,30 @@ import torch.nn as nn
 import torch    
 import torch.nn.functional as F 
 class focalLoss(nn.Module):
-    def __init__(self,gamma,alpha=1):
+    def __init__(self,gamma=3,alpha=1):
         super().__init__()
         self.gamma=gamma
         self.alpha=alpha
         
     def forward(self,input,target):
-        if input.max()>1. :
-            print ("inputs >1")
+       # -log (p).t -log(1-p)*(1-t)
         ep=1e-7
-        iflat=input.view(input.shape[0], -1)
-        tflat=target.view(input.shape[0], -1)
-        iflat=iflat.clamp(ep,1-ep)
-        loss = -1 * torch.log(iflat) * tflat.float() # cross entropy
-        loss = self.alpha * loss * (1 - iflat) ** self.gamma #
+        clampinput=torch.clamp(input,min=ep, max=1-ep) 
+        coef1= self.alpha * ((1 - clampinput) ** self.gamma)
+        coef2=  self.alpha * ( clampinput ** self.gamma )
+        loss = - coef1* torch.log(clampinput) * target  - coef2 * torch.log(1-clampinput) * (1-target)
+        
         return loss.mean()
+
+
 class weightBinaryloss(nn.Module):
-    def __init__(self,beta=4):
+    def __init__(self,beta=3):
         super().__init__()
         self.beta=beta
     def forward(self,input,target):
         ep=1e-7
-        input=torch.clamp(input,min=ep, max=1-ep)  
-        loss=-self.beta*target*torch.log(input)-(1-target)* torch.log(1-input)
+        clampinput=torch.clamp(input,min=ep, max=1-ep)  
+        loss=-self.beta*target*torch.log(clampinput)-(1-target)* torch.log(1-clampinput)
         return loss.mean()
    
 def dice_coef(input, target):
@@ -40,18 +41,19 @@ def dice_coef(input, target):
     dice=(2.0 * intersection + smooth) / (iflat.sum() + tflat.sum() + smooth)   
     return dice
 class MixedLoss(nn.Module):
-    def __init__(self,  gamma,alpha=1):
+    def __init__(self,  gamma=3,alpha=1):
         super().__init__()
         self.weightbce=weightBinaryloss()
         self.focal = focalLoss(alpha,gamma)
         self.bce=nn.BCELoss(reduction="mean")
+        
 
     def forward(self, input, target):
         dice= 1-dice_coef(input, target)
         bce=self.bce(input,target)
         weightbce=self.weightbce(input,target)
-        # focal=self.focal(input, target)
-        loss=bce+dice+weightbce
+        focal=self.focal(input, target)
+        loss=bce+dice+focal
 
         return loss.mean()
           

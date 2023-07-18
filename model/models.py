@@ -1,153 +1,314 @@
 
 import torch
 import torch.nn as nn
+import torchvision
 from torchvision import datasets, models, transforms
+from torchvision.models.densenet import _Transition, _load_state_dict
 import torch.nn.functional as F
 import sys
 from collections import OrderedDict
-class DoubleConv(nn.Module):
-    def __init__(self, in_channels, out_channels,mid_channels):
+from torchvision.models import DenseNet
+from collections import OrderedDict
+from typing import List
+class Encoder(nn.Module):
+    def __init__(self,skip_connections,downsample ) -> None:
+        
         super().__init__()
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        )
+        self.skip_connections=skip_connections
+        denseNet=torchvision.models.densenet121(weights="DenseNet121_Weights.IMAGENET1K_V1" )
+        features = denseNet.features[:-1]          
+        self.features=features
+        for module in self.features.modules():
+            if isinstance(module, nn.AvgPool2d):
+                module.register_forward_hook(lambda _, input, output : self.skip_connections.append(input[0]))
 
-    def forward(self, x):
-        return self.double_conv(x)
-class Up(nn.Module):
-    """Upscaling then double conv"""
-    def __init__(self, in_channels, out_channels, bilinear=True):
-        super().__init__()
-        if bilinear:
-            self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
-            self.conv = DoubleConv(in_channels, out_channels, in_channels // 2)
-        else:
-            self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
-            self.conv = DoubleConv(in_channels, out_channels)
-
-    def forward(self, x):
-        x = self.up(x)
-        x=self.conv(x)     
-        return x
-class ConvBlock(nn.Module):
-    def __init__(self,in_channel,out_channel,padding=1, kernel_size=3, stride=1 ):
-        super().__init__()
-        self.conv=nn.Conv2d(in_channel,out_channel,kernel_size=kernel_size,stride=stride,padding=padding)
-        self.batchnorm=nn.BatchNorm2d(out_channel)
-        self.relu=nn.ReLU()
     def forward(self,x):
-        x=self.conv(x)
-        x=self.batchnorm(x)
-        x=self.relu(x)
-        return x 
-
-class Upblock(nn.Module):
-    def __init__(self,in_channel,out_channel,up_in_channel,up_out_channel,kernel_size=2,stride=2) -> None:
-        super().__init__()
-        self.upsample=nn.ConvTranspose2d(up_in_channel,up_out_channel,kernel_size=kernel_size,stride=stride)
-        self.conv_block1=ConvBlock(in_channel=in_channel,out_channel=out_channel)
-        self.conv_block2=ConvBlock(in_channel=out_channel,out_channel=out_channel)
-    def forward(self,x_up,x_down):
-        x=self.upsample(x_up)
-        x=torch.cat((x,x_down),1)
-
-        x=self.conv_block1(x)
-        x=self.conv_block2(x)
+        x=self.features(x)   
         return x
 
-class Bridge(nn.Module):
-    def __init__(self,in_channel,out_channel,padding=1, kernel_size=3, stride=1 ):
-        self. conv=nn.ConvBlock
-class DenseUNet (nn.Module):
-    def __init__ (self,imageSize,numclass):
-        super(DenseUNet, self).__init__()
-        assert imageSize%32==0 ,"input image must be divisible by 32"
-        self.numclass=numclass
-        self.imageSize=imageSize
-        denseNet=models.densenet121(weights="DenseNet121_Weights.IMAGENET1K_V1" )
-        #(3,512,512)
-        self.inputblock =nn.Sequential( OrderedDict ([ 
-                ("conv0", nn.Conv2d(3, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False) ),
-                ( "norm0", nn.BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True) ),
-                ("relu0", nn.ReLU(inplace=True) ),
-                ( "pool0", nn.MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False) ) ]) )
-        #(64,128,128)
-        self.denseblock1=denseNet.features.denseblock1
-        #256,128,128
-        self.transition1=denseNet.features.transition1
-        #128,64,64
-        self.denseblock2=denseNet.features.denseblock2
-        #512,64,64
-        self.transition2=denseNet.features.transition2
-        #256,32,32
-        self.denseblock3=denseNet.features.denseblock3
-        #1024,32,32
-        self.transition3=denseNet.features.transition3
-        # 512,16,16
-        self.denseblock4=denseNet.features.denseblock4
-        # 1024,16,16
-        self.bottle= nn.Sequential( 
-            OrderedDict ([ 
-                ("conv0", nn.Conv2d(1024, 2048, kernel_size=3 ,stride=2, padding=1, bias=False) ),
-                ( "norm0", nn.BatchNorm2d(2048, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True) ),
-                ("relu0", nn.ReLU(inplace=True) ),
-                ]) 
+class Decoder(nn.Module):
+    def __init__(self,skip_connections,skip_connections_shape,upsample, num_init_features=64,block_config=[6,12,24,16],growth_rate=32) -> None:
+        super().__init__()
+        self.skip_connections = skip_connections
+        self.skip_connections_shape=skip_connections_shape
+        self.upsample = upsample
+        denseNet=torchvision.models.densenet121(weights="DenseNet121_Weights.IMAGENET1K_V1" )
+        features = denseNet.features[4:-2]
+        
+        num_features=num_init_features
+        num_features_list = []
+        for i, num_layers in enumerate(block_config):
+            # //is floor division
+            num_input_features = num_features + num_layers * growth_rate
+            num_output_features = num_features // 2
+            num_features_list.append((num_input_features, num_output_features))
+            num_features = num_input_features // 2
+       # num_features_list : [(256, 32), (512, 64), (1024, 128), (1024, 256)]
+        
+        for i in range (len(features)) :
+            if isinstance(features[i], _Transition):
+                num_input_features, num_output_features = num_features_list.pop(1)
+                features[i]= _TransitionUp(num_input_features, num_output_features,skip_connections,skip_connections_shape=skip_connections_shape)
 
-        )
+        self.features=  nn.Sequential(*reversed(features))
+        num_input_features, _ = num_features_list.pop(0)      
+        if upsample:
+            self.features.add_module('upsample0', nn.Upsample(scale_factor=4, mode='bilinear'))
+            self.features.add_module('norm0', nn.BatchNorm2d(num_input_features))
+            self.features.add_module('relu0', nn.ReLU(inplace=True))
+            self.features.add_module('conv0', nn.Conv2d(num_input_features, num_init_features, kernel_size=1, stride=1, bias=False))
+            self.features.add_module('norm1', nn.BatchNorm2d(num_init_features))
+
+    def forward(self, x):
+        return self.features(x)        
+class _Concatenate(nn.Module):
+    def __init__(self, skip_connections):
+        super(_Concatenate, self).__init__()
+        self.skip_connections = skip_connections
+        
+    def forward(self, x):
+        return torch.cat([x, self.skip_connections.pop()], 1)
+# pop will pop the last element
+# skip connection :(128,128,128), (256,64,64), (512,32,32)
+ #    num_features_list : [(512, 64), (1024, 128), (1024, 256)]
+          
+class _TransitionUp(nn.Sequential):
+    # change tensor input shape from num_input_features to num_output_features, and x2 spatial
+    def __init__(self, num_input_features, num_output_features, skip_connections,skip_connections_shape):
+        super(_TransitionUp, self).__init__()
        
-        self.norm5=denseNet.features.norm5
+        self.add_module('norm1', nn.BatchNorm2d(num_input_features))
+        self.add_module('relu1', nn.ReLU(inplace=True))
+        self.add_module('conv1', nn.Conv2d(num_input_features, num_output_features * 2,
+                                              kernel_size=1, stride=1, bias=False))
+        # effect of upsample
+        #(C,H,W)=> (C,H* scale factor,W* scale factor)
+        self.add_module('upsample', nn.Upsample(scale_factor=2, mode='bilinear'))
+        num_feature= num_output_features * 2 + skip_connections_shape.pop(0)
+        assert num_feature== num_output_features *4 , "invalid shape"
+        self.add_module('cat', _Concatenate(skip_connections))
+        self.add_module('norm2', nn.BatchNorm2d(num_feature))
+        self.add_module('relu2', nn.ReLU(inplace=True))
+        self.add_module('conv2', nn.Conv2d(num_feature, num_output_features,
+                                          kernel_size=1, stride=1, bias=False))
+        self.add_module('cat', _Concatenate(skip_connections))
+        self.add_module('norm2', nn.BatchNorm2d(num_output_features * 4))
+        self.add_module('relu2', nn.ReLU(inplace=True))
+        self.add_module('conv2', nn.Conv2d(num_output_features * 4, num_output_features,
+                                          kernel_size=1, stride=1, bias=False))
 
-        self.upblock1=Upblock(in_channel=1024+1024,out_channel=1024,up_in_channel=2048,up_out_channel=1024)
-         # up (2048,8,8) to (1024,16,16)+(1024,16,16) +conv= (1024,16,16)
-        self.upblock2=Upblock(in_channel=1024+1024,out_channel=512,up_in_channel=1024,up_out_channel=1024)
-        # up (1024,16,16) to (1024,32,32)+(1024,32,32) +conv= (512,32,32)
-        self.upblock3=Upblock(in_channel=512+512,out_channel=256,up_in_channel=512,up_out_channel=512)
-        #  up (512,32,32) to (512,64,64) +(512.64,64)+conv=256,64,64
-        self.upblock4=Upblock(in_channel=256+256,out_channel=128,up_in_channel=256,up_out_channel=256)
-        #up(256,64,64) to (256,128,128) + (256,128,128) +conv= (128,128,128)
-        self.upblock5=Upblock(in_channel=3+128,out_channel=numclass,up_in_channel=128,up_out_channel=128,kernel_size=4,stride=4)
-        # up 128,128,128 to 128,512,512 + 3,512,512 +conv =class,512,512     
-        self.sigmoid=nn.Sigmoid()            
-    def forward(self,x):
-        #encoder
-        idenity=x
-        x=self.inputblock(x)
-        respath1=self.denseblock1(x)
-        x=self.transition1(respath1)
-        respath2=self.denseblock2(x)
-        x=self.transition2(respath2)
-        respath3=self.denseblock3(x)
-        x=self.transition3(respath3)
-        respath4=self.denseblock4(x)
-        x=self.norm5(respath4)  
-        bottle=self.bottle(x)
-        x=self.upblock1(bottle,respath4)
-        x=self.upblock2(x,respath3)
-        x=self.upblock3(x,respath2)
-        x=self.upblock4(x,respath1)
-        x=self.upblock5(x,idenity)
+class DenseUNet(nn.Module):
+    def __init__(self, n_classes=1, growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, drop_rate=0, downsample=True, pretrained_encoder_uri=None, progress=None):
+        super(DenseUNet, self).__init__()
+        self.skip_connections = []
+        num_feature=num_init_features
+        self.skip_connections_shape=[]
+        for num_layer in block_config[:-1]:
+            num_feature=num_feature+growth_rate*num_layer
+            self.skip_connections_shape.append(num_feature//2)
+            num_feature=num_feature//2
+        # self.skip_connections_shape:[128,256,512]
+        self.encoder=Encoder(skip_connections=self.skip_connections,downsample=downsample)
+       
+        self.decoder=Decoder(skip_connections=self.skip_connections,skip_connections_shape=self.skip_connections_shape,upsample=downsample)
+        self.classifier = nn.Conv2d(num_init_features, n_classes, kernel_size=1, stride=1, bias=True)         
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)  
+        x=self.classifier(x)
            
         return x
-
 
 def pretrainDenseUnet(model):
     state_dict=torch.load("/root/repo/Chexpert/chexpert/model/output/best_model.pth")
     pretrain=state_dict["model_state_dict"]
     with torch.no_grad():
-        model.sequenceLayer.conv0.weight.copy_(pretrain["dense.conv0.weight"])
-        for name, module in model.named_children():
+        model.encoder.features.conv0.weight.copy_(pretrain["dense.conv0.weight"])
+        for name, module in model.encoder.features.named_children():
             if name.startswith("denseblock"):
-                for subname,submodule in getattr(model,name).named_children():
-                    layer=getattr(getattr(model,name),subname )
+                # print (name)
+                for subname,submodule in getattr(model.encoder.features,name).named_children():
+                    # print (subname)
+                    layer=getattr(getattr(model.encoder.features,name),subname )
                     layer.conv1.weight.copy_(pretrain["dense.{}.{}.conv1.weight".format(name,subname)])
                     layer.conv2.weight.copy_(pretrain["dense.{}.{}.conv2.weight".format(name,subname)])
+            if name.startswith("transition"):
+                    # print (name)
+                    module.conv.weight.copy_(pretrain["dense.{}.conv.weight".format(name)])
+        
+        # for name, module in model.decoder.features.named_children():
+        #     if name.startswith("denseblock"):
+        #         for subname,submodule in getattr(model.encoder.features,name).named_children():
+        #             layer=getattr(getattr(model.encoder.features,name),subname )
+        #             layer.conv1.weight.copy_(pretrain["dense.{}.{}.conv1.weight".format(name,subname)])
+        #             layer.conv2.weight.copy_(pretrain["dense.{}.{}.conv2.weight".format(name,subname)])
+        #      if name.startswith("transition"):
+        #             module.conv.weight.copy_(pretrain["dense.{}.conv.weight".format(name)])
+# net=DenseUNet(n_classes=2)
+# pretrainDenseUnet(net)
+# print (net)    
+    # class _DenseUNetEncoder(DenseNet):
+#     def __init__(self, skip_connections, growth_rate, block_config, num_init_features, bn_size, drop_rate, downsample):
+#         super(_DenseUNetEncoder, self).__init__(growth_rate, block_config, num_init_features, bn_size, drop_rate)       
+#         self.skip_connections = skip_connections
+#         # remove last norm, classifier
+#         features = OrderedDict(list(self.features.named_children())[:-1])
+        
+#         delattr(self, 'classifier')
+#         if not downsample:
+#             features['conv0'].stride = 1
+#             del features['pool0']
+#         self.features = nn.Sequential(features)      
+#         for module in self.features.modules():
+#             if isinstance(module, nn.AvgPool2d):
+#                 # purpose of register_forward_hook:
 
-net=DenseUNet(imageSize=512,numclass=4)
-a=torch.rand(5,3,512,512)
-y=net(a)
-print (y.shape)
+#                 module.register_forward_hook(lambda _, input, output : self.skip_connections.append(input[0]))
+#     def forward(self, x):
+#         x=self.features(x)
+       
+#         return x
+        
+# class _DenseUNetDecoder(DenseNet):
+#     def __init__(self, skip_connections, skip_connections_shape, growth_rate, block_config, num_init_features, bn_size, drop_rate, upsample):
+#         super(_DenseUNetDecoder, self).__init__(growth_rate, block_config, num_init_features, bn_size, drop_rate)
+        
+#         self.skip_connections = skip_connections
+#         self.upsample = upsample
+        
+#         # remove conv0, norm0, relu0, pool0, last denseblock, last norm, classifier
+#         features = list(self.features.named_children())[4:-2]
+#         delattr(self, 'classifier')    
+#         # the distance within 1 tuple is 1 dense block
+#         # num_features_list : [(256, 32), (512, 64), (1024, 128), (1024, 256)]
+       
+#         num_features_list=[]
+#         num_feature=num_init_features
+#         dense_feature= num_feature+ block_config[0] * growth_rate
+#         tran_feature=dense_feature//2
+#         for i, num_layers in enumerate(block_config[1:]):
+#                     num_input_features = tran_feature + num_layers * growth_rate         
+#                     num_features_list.append((num_input_features, num_feature))
+#                     num_feature=tran_feature
+#                     tran_feature = num_input_features // 2
+
+#         for i in range(len(features)):
+#             name, module = features[i]
+#             if isinstance(module, _Transition):
+#                 num_input_features, num_output_features = num_features_list.pop(0)
+#                 Tran_layer=_TransitionUp(num_input_features, num_output_features, skip_connections,skip_connections_shape)
+#                 features[i] = (name, Tran_layer)
+
+                
+#         features.reverse()
+#         self.features = nn.Sequential(OrderedDict(features))
+#         num_input_features= num_init_features+ block_config[0] * growth_rate  # 256      
+#         if upsample:
+            
+#             modules=nn.Sequential(  
+
+#                      nn.ConvTranspose2d(num_input_features, num_init_features, kernel_size=2, stride=2, bias=False),
+#                       nn.BatchNorm2d(num_init_features),
+#                       nn.ReLU(inplace=True)          
+#                             )
+
+#             self.features+=modules
+            
+
+#             # self.features.add_module('norm0', nn.BatchNorm2d(num_input_features))
+#             # self.features.add_module('relu0', nn.ReLU(inplace=True))
+#             # self.features.add_module('conv0', nn.Conv2d(num_input_features, num_init_features, kernel_size=1, stride=1, bias=False))
+#             # self.features.add_module('norm1', nn.BatchNorm2d(num_init_features))
+
+#     def forward(self, x):
+#         return self.features(x)
+ 
+# class _Concatenate(nn.Module):
+#     def __init__(self, skip_connections):
+#         super(_Concatenate, self).__init__()
+#         self.skip_connections = skip_connections
+        
+#     def forward(self, x):
+#         x=torch.cat([x, self.skip_connections.pop()], 1)
+        
+#         return x
+# # skip connection :(128,128,128), (256,64,64), (512,32,32)
+#  #    num_features_list : [(512, 64), (1024, 128), (1024, 256)]
+          
+# class _TransitionUp(nn.Sequential):
+#     def __init__(self, num_input_features, num_output_features, skip_connections,skip_connections_shape):
+#         super(_TransitionUp, self).__init__()
+        
+#         self.add_module('norm1', nn.BatchNorm2d(num_input_features))
+#         self.add_module('relu1', nn.ReLU(inplace=True))
+#         self.add_module('conv1', nn.Conv2d(num_input_features, num_output_features * 2,
+#                                               kernel_size=1, stride=1, bias=False))
+        
+#         self.add_module('upsample', nn.Upsample(scale_factor=2, mode='bilinear'))
+#         # print ( "tran", num_output_features * 2,skip_connections_shape[0])
+#         num_feature= num_output_features * 2 + skip_connections_shape.pop(0)
+#         assert num_feature== num_output_features *4 , "invalid shape"
+#         self.add_module('cat', _Concatenate(skip_connections))
+#         self.add_module('norm2', nn.BatchNorm2d(num_feature))
+#         self.add_module('relu2', nn.ReLU(inplace=True))
+#         self.add_module('conv2', nn.Conv2d(num_feature, num_output_features,
+#                                           kernel_size=1, stride=1, bias=False))
+#         # for name, module in self.named_children():
+#         #     module.__name__=name
+#         #     module.register_forward_hook(lambda mod,input,output : print (mod.__name__,input[0].shape,output.shape) )
+       
+# class DenseUNet(nn.Module):
+#     def __init__(self, n_classes=1, growth_rate=32, block_config=(6, 12, 24, 16), num_init_features=64, bn_size=4, drop_rate=0, downsample=True, pretrained_encoder_uri=None, progress=None):
+#         super(DenseUNet, self).__init__()
+#         self.skip_connections = []
+#         num_feature=num_init_features
+#         self.skip_connections_shape=[]
+#         for num_layer in block_config[:-1]:
+#             num_feature=num_feature+growth_rate*num_layer
+#             self.skip_connections_shape.append(num_feature//2)
+#             num_feature=num_feature//2
+        
+#         self.input_block=nn.Sequential(OrderedDict([
+#                 ('conv0', nn.Conv2d(3, 64,kernel_size=7,stride=1,padding=3,bias=False)),            
+#                 ('norm0', nn.BatchNorm2d(64)),
+#                 ('relu0', nn.ReLU(inplace=True)),
+#                 ('conv1', nn.Conv2d(64, 64,kernel_size=3,stride=1,padding=1,bias=False)),            
+#                 ('norm1', nn.BatchNorm2d(64)),
+#                 ('relu1', nn.ReLU(inplace=True)),
+#                 ('conv2', nn.Conv2d(64, 64,kernel_size=3,stride=1,padding=1,bias=False)),            
+#                 ('norm2', nn.BatchNorm2d(64)),
+#                 ('relu2', nn.ReLU(inplace=True)),
+#                 ('conv3', nn.Conv2d(64, 64,kernel_size=1,stride=1,bias=False)),            
+#                 ('norm3', nn.BatchNorm2d(64)),
+#                 ('relu3', nn.ReLU(inplace=True)),
+#                 ('pool', nn.MaxPool2d(kernel_size=2,stride=2))
+               
+# ]))
+#         self.eventual_up=nn.Sequential(OrderedDict([
+   
+#                 ('conv1', nn.ConvTranspose2d(num_init_features*2, num_init_features, kernel_size=2, stride=2, bias=False) )  ,
+#                 ('norm1', nn.BatchNorm2d(num_init_features)),
+#                 ('relu',  nn.ReLU(inplace=True) )                         
+                            
+#         ]))
+#         self.encoder = _DenseUNetEncoder(self.skip_connections, growth_rate, block_config, num_init_features, bn_size, drop_rate, downsample)
+    
+#         self.decoder = _DenseUNetDecoder(self.skip_connections, self.skip_connections_shape,growth_rate, block_config, num_init_features, bn_size, drop_rate, downsample)
+
+#         self.classifier = nn.Conv2d(num_init_features, n_classes, kernel_size=1, stride=1, bias=True)
+        
+#         self.encoder._load_state_dict = self.encoder.load_state_dict
+#         self.encoder.load_state_dict = lambda state_dict : self.encoder._load_state_dict(state_dict, strict=False)
+#         if pretrained_encoder_uri:
+#             _load_state_dict(self.encoder, str(pretrained_encoder_uri), progress)
+#         self.encoder.load_state_dict = lambda state_dict : self.encoder._load_state_dict(state_dict, strict=True)
+
+#     def forward(self, x):
+#         skip=self.input_block(x)
+#         x = self.encoder(x)
+      
+#         x = self.decoder(x)
+#         x=torch.cat([x,skip],1)
+#         x=self.eventual_up(x)
+#         y = self.classifier(x)
+#         return y

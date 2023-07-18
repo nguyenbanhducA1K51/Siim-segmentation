@@ -9,6 +9,9 @@ import sys
 sys.path.append("../data")
 from data import dataUtil,dataLoader
 from . import modelUtils,models,metric
+
+from  .unet_like import udense,ures
+
 from torch.optim import Adam
 import torch.optim as optim
 import segmentation_models_pytorch as smp
@@ -16,7 +19,7 @@ from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from tqdm import tqdm
 from torch.optim.lr_scheduler import StepLR
-
+from torch.optim.lr_scheduler import OneCycleLR
 class SIIMnet():
     def __init__(self,cfg,device) :
         self.cfg=cfg
@@ -40,7 +43,8 @@ class SIIMnet():
                 x=x.to(self.device).float()
                 y_true=y_true.to(self.device).float()  
                 y_hat=model(x).squeeze(1) 
-                y_hat=y_hat.sigmoid()           
+                y_hat=y_hat.sigmoid()      
+
                 loss=self.criterion(y_hat,y_true)
                 losses.update(loss.item())
                 loss.backward()   
@@ -80,44 +84,44 @@ class SIIMnet():
     def tta_eval(self,dataLoader,model,epoch):
         print ("Eval tta epoch {}".format(epoch))
         model.eval()
-        out_losses=[]
+        tta=dataLoader.Tta()
         diceMetric=metric.Metric()
-        init=True
         out_preds=torch.zeros(self.test_size,self.cfg.image.size,self.cfg.image.size).to(self.device)
         out_true=torch.zeros(self.test_size,self.cfg.image.size,self.cfg.image.size).to(self.device)
-        with torch.no_grad():
-            for i in range (self.cfg.tta.times):                             
-                losses=[]
-                predmask=[]
-                truemask=[]
+        for (forward_transform,backward_transform) in tta.get_tta_transform():
+            losses=[]
+            predmask=[]
+            truemask=[]
+            with torch.no_grad():
                 with tqdm(dataLoader,unit="batch") as tepoch:
                     for idx, (_,x,y_true) in enumerate (tepoch):
                         x=x.to(self.device).float()
-                        y_hat=model(x).squeeze(1)     
                         y_true=y_true.to(self.device).float()
-                        y_hat=torch.sigmoid(y_hat)
+                        x=forward_transform(x)
+                        y_hat=model(x).squeeze(1)   
+                        y_hat=torch.sigmoid(y_hat)  
+                        y_true=forward_transform(y_true)
                         loss=self.criterion(y_hat,y_true)
+                        y_hat=backward_transform(y_hat)
+                        y_true=backward_transform(y_true)                                          
                         losses.append (loss.item())
-                        predmask.append(y_hat)                   
-                        truemask.append(y_true)                        
                         if idx%4==0:
                             tepoch.set_postfix(loss = loss.item())
+                        predmask.append(y_hat)                   
+                        truemask.append(y_true)  
                 predmask=torch.concat(predmask,dim=0)  
                 truemask=torch.concat(truemask,dim=0)
-                losses=sum(losses)/len(losses)              
-                out_preds+=predmask
-                out_true+=truemask
-                out_losses.append(losses)
-            out_preds=(out_preds/self.cfg.tta.times).sigmoid()
-            out_true=out_true/self.cfg.tta.times
-            out_losses=sum(out_losses)/len(out_losses)
-            dice,_,_=diceMetric.compDice(out_preds,out_true)  
-            print (" Avg dice with tta :{}".format(dice))
-            return {
-                "dice":dice.item(),
-                "loss":[]
-                # "loss":out_losses
-                }
+        out_preds=out_preds/len(tta.get_tta_transform())
+        out_true=out_true/len(tta.get_tta_transform())
+        out_losses=sum(out_losses)/len(out_losses)
+        dice,_,_=diceMetric.compDice(out_preds,out_true)  
+        print (" Avg dice with tta :{}".format(dice))
+        return {
+            "dice":dice.item(),
+            "loss":[]
+            # "loss":out_losses
+            }
+
     def train_epochs(self):
         train_metrics=[]
         val_metrics=[]
@@ -142,8 +146,12 @@ class SIIMnet():
             classes=1, 
             activation=None,
         )
-        elif self.cfg.model=="denseUnet":
-            return models.DenseUNet(imageSize=self.cfg.image.size,numclass=1)
+        elif self.cfg.model=="udense":
+            model=models.DenseUNet()
+            models.pretrainDenseUnet(model)
+            return model
+        elif self.cfg.model=="ures":
+            return ures.UNetWithResnet50Encoder()
     def load_model_ckp(self):
         state_dict=torch.load(os.path.dirname(os.path.abspath(__name__))+"/model/output/best_model.pth")
         print ("Load model check point with dice score = {}".format(state_dict["metric"]["dice"]))
