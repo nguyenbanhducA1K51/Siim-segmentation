@@ -1,4 +1,4 @@
-
+## this file is for experimenting model structure only
 import torch
 import torch.nn as nn
 import torchvision
