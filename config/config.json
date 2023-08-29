@@ -1,16 +1,13 @@
 {
     "path":{
         "repo_path":"/root/repo/Siim-segmentation",
-        "pngImages":"/root/data/siim-acr-pneumothorax/png_images",
-        "pngMasks":"/root/data/siim-acr-pneumothorax/png_masks",
-        "testCsv":"/root/data/siim-acr-pneumothorax/stage_1_test_images.csv",
-
-        "trainCsv":"/root/data/siim-acr-pneumothorax/stage_1_train_images.csv"
-
-
+        "train_dicom_path":"/root/data/siim-other/pneumothorax/dicom-images-train",
+        "infer_dicom_path":"/root/data/siim-other/pneumothorax/dicom-images-test",
+        "train_rle_csv":"/root/data/siim-other/pneumothorax/train-rle.csv",
+        "png_save_path":"/root/data/siim_png_convert"
     },
     "image":{
-        "size":512
+        "size":1024
     },
    
     "sampler":{
@@ -20,6 +17,7 @@
         }
 
     },
+    "train_mode":"default",
     "train":{
         "epochs":10,
         "batch_size":4,
