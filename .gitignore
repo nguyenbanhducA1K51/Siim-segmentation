@@ -1,3 +1,5 @@
 config.json
 *.pth
 __pycache__
+test1.py
+scratch.yaml
