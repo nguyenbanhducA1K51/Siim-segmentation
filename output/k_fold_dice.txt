@@ -1,6 +1,0 @@
-This is evaluation dice score for each fold.
-Fold 1 mean dice of epochs 0.39839503169059753, highest dice 0.39839503169059753.
-Fold 2 mean dice of epochs 0.30593010783195496, highest dice 0.30593010783195496.
-Fold 3 mean dice of epochs 0.7821577191352844, highest dice 0.7821577191352844.
-Fold 4 mean dice of epochs 0.08411102741956711, highest dice 0.08411102741956711.
-Fold 5 mean dice of epochs 0.11833284795284271, highest dice 0.11833284795284271.
