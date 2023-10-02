@@ -19,8 +19,6 @@ from torch.optim.lr_scheduler import OneCycleLR,StepLR,CosineAnnealingLR
 
 sys.path.append("../data")
 sys.path.append("../")
-sys.path.append("/root/repo/Siim-segmentation/src")
-
 from dataLoader import SIIMDataset,UpSampler
 from models.unet import ResnetSuperVision
 from models.resunet import ResUnet
@@ -38,9 +36,7 @@ class SIIMnet():
         self.criterion=self.loadCriterion()
         self.dice=metric.DiceMetric()
     def train_epoch(self,dataLoader,model,epoch):
-        losses=metric.AverageMeter()
-        # diceMetric=metric.Metric()
-        
+        losses=metric.AverageMeter()        
         diceList=[]
         log_interval=self.cfg.train.log_interval
         model.train()
@@ -50,15 +46,10 @@ class SIIMnet():
             for idx,(x,y_true) in enumerate(tepoch) :
                 self.optimizer.zero_grad()
                 x=x.to(self.device).float()
-
                 y_true=y_true.unsqueeze(1).to(self.device).float()  
-
                 c=y_true.clone().cuda()
-                # is_empty = torch.tensor([y_true.sum(1) > 0], dtype=torch.float32, device='cuda')
                 is_empty=y_true.view( y_true.shape[0],-1).sum(1)
                 is_empty=(is_empty>0).float().cuda()
-
-
                 y_hat, pred_empty=model(x)
                 pred_empty=pred_empty.squeeze(1)
 
@@ -131,16 +122,12 @@ class SIIMnet():
             mean_dices_of_epochs=np.mean([data["dice"] for data in val_metrics]),
             highest_mean_dice=np.max([data["dice"] for data in val_metrics] ),
             print (f"Finish train on fold {self.fold} with mean dice of epochs {mean_dices_of_epochs}, highes mean auc {highest_mean_dice}")
-            # modelUtils.save_metrics_and_models({"train_stats":train_metrics,"val_stats":val_metrics},self.model.state_dict())
-
 
 
     def train_epochs(self,train_loader,val_loader,fold):
         print (f"Training on FOLD{fold}")
         train_metrics=[]
         val_metrics=[]
-
-        # for early stopping
         best_val_dice=float('-inf')
         counter=0
         for epoch in range (0, self.cfg.train.epochs):
@@ -165,10 +152,8 @@ class SIIMnet():
            
     def loadModel(self):
         if self.cfg.model=="unet":
-            # return ResnetSuperVision(1, backbone_arch='resnet34')
             return ResUnet(1)
-        
-   
+          
     
     def loadOptimizer(self,model):
         if self.cfg.train.optimizer.name=="Adam":

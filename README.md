@@ -3,6 +3,8 @@ SIIM-ACR Pneumothorax segmentation
 
 ## Purpose
 This repository attempts to perform segmentation task on Pneumothorax disease from chest x-ray image
+[![Screen-Shot-2023-09-13-at-18-21-55.png](https://i.postimg.cc/SxGndQzd/Screen-Shot-2023-09-13-at-18-21-55.png)](https://postimg.cc/87jkPS4f)
+
 ## Dataset
 Pneumothorax can be caused by a blunt chest injury, damage from underlying lung disease, or most horrifying—it may occur for no obvious reason at all. On some occasions, a collapsed lung can be a life-threatening event.
 Pneumothorax is usually diagnosed by a radiologist on a chest x-ray, and can sometimes be very difficult to confirm. To learn more about dataset visit kaggle website
